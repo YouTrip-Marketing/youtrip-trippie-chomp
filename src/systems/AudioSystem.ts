@@ -1,19 +1,26 @@
 /**
- * Sound effects via Web Audio API oscillators (same as v1).
- * Background music: procedural 8-bit chiptune loop.
+ * Audio system — SFX + background music via Web Audio API oscillators.
+ * Three BGM tracks: lobby (Arpeggio Ambient), game (Happy Adventure Bounce).
+ * Game over is a one-shot SFX (Quick Buzz).
  */
+type BGMTrack = 'lobby' | 'game';
+
 export class AudioSystem {
   private ctx: AudioContext | null = null;
-  private bgmPlaying: boolean = false;
+  private currentBGM: BGMTrack | null = null;
   private bgmGain: GainNode | null = null;
   private bgmTimeout: number | null = null;
 
   init(): void {
-    if (this.ctx) return;
-    this.ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    if (!this.ctx) {
+      this.ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    }
+    if (this.ctx.state === 'suspended') {
+      this.ctx.resume();
+    }
   }
 
-  play(type: 'dot' | 'power' | 'ghost' | 'die' | 'click' | 'levelup'): void {
+  play(type: 'dot' | 'power' | 'ghost' | 'die' | 'click' | 'levelup' | 'gameover'): void {
     if (!this.ctx) return;
     const now = this.ctx.currentTime;
     const osc = this.ctx.createOscillator();
@@ -73,139 +80,250 @@ export class AudioSystem {
         break;
 
       case 'levelup': {
-        // Cheerful ascending arpeggio
-        osc.type = 'square';
-        osc.frequency.setValueAtTime(523, now);
-        osc.frequency.setValueAtTime(659, now + 0.1);
-        osc.frequency.setValueAtTime(784, now + 0.2);
-        osc.frequency.setValueAtTime(1047, now + 0.3);
-        gain.gain.setValueAtTime(0.18, now);
-        gain.gain.setValueAtTime(0.18, now + 0.3);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
-        osc.start(now);
-        osc.stop(now + 0.5);
-        // Second voice — harmony
-        const osc2 = this.ctx!.createOscillator();
-        const gain2 = this.ctx!.createGain();
-        osc2.connect(gain2);
-        gain2.connect(this.ctx!.destination);
-        osc2.type = 'triangle';
-        osc2.frequency.setValueAtTime(262, now);
-        osc2.frequency.setValueAtTime(330, now + 0.1);
-        osc2.frequency.setValueAtTime(392, now + 0.2);
-        osc2.frequency.setValueAtTime(523, now + 0.3);
-        gain2.gain.setValueAtTime(0.12, now);
-        gain2.gain.setValueAtTime(0.12, now + 0.35);
-        gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.55);
-        osc2.start(now);
-        osc2.stop(now + 0.55);
+        // Triumphant fanfare — fast ascending arpeggio + chord stab + sparkle
+        // Lead: square wave melody (higher octave for brightness)
+        const leadNotes = [
+          { f: 523, t: 0 },     // C5
+          { f: 659, t: 0.08 },  // E5
+          { f: 784, t: 0.16 },  // G5
+          { f: 1047, t: 0.24 }, // C6
+          { f: 1319, t: 0.32 }, // E6 (peak)
+          { f: 1568, t: 0.42 }, // G6 hold
+        ];
+        leadNotes.forEach(({ f, t }) => {
+          const o = this.ctx!.createOscillator();
+          const g = this.ctx!.createGain();
+          o.type = 'square';
+          o.frequency.value = f;
+          o.connect(g); g.connect(this.ctx!.destination);
+          g.gain.setValueAtTime(0.28, now + t);
+          g.gain.exponentialRampToValueAtTime(0.001, now + t + 0.25);
+          o.start(now + t); o.stop(now + t + 0.3);
+        });
+
+        // Bass: triangle root notes
+        const bassNotes = [
+          { f: 131, t: 0 },     // C3
+          { f: 165, t: 0.16 },  // E3
+          { f: 196, t: 0.32 },  // G3
+          { f: 262, t: 0.42 },  // C4 final
+        ];
+        bassNotes.forEach(({ f, t }) => {
+          const o = this.ctx!.createOscillator();
+          const g = this.ctx!.createGain();
+          o.type = 'triangle';
+          o.frequency.value = f;
+          o.connect(g); g.connect(this.ctx!.destination);
+          g.gain.setValueAtTime(0.22, now + t);
+          g.gain.exponentialRampToValueAtTime(0.001, now + t + 0.4);
+          o.start(now + t); o.stop(now + t + 0.45);
+        });
+
+        // Sparkle: high-pitched sine bell on the resolution
+        const sparkleNotes = [
+          { f: 2093, t: 0.42 }, // C7
+          { f: 2637, t: 0.54 }, // E7
+          { f: 3136, t: 0.62 }, // G7
+        ];
+        sparkleNotes.forEach(({ f, t }) => {
+          const o = this.ctx!.createOscillator();
+          const g = this.ctx!.createGain();
+          o.type = 'sine';
+          o.frequency.value = f;
+          o.connect(g); g.connect(this.ctx!.destination);
+          g.gain.setValueAtTime(0.15, now + t);
+          g.gain.exponentialRampToValueAtTime(0.001, now + t + 0.5);
+          o.start(now + t); o.stop(now + t + 0.55);
+        });
+
+        // Final chord stab (C major triad held)
+        const chordStabT = 0.42;
+        const chordStabFreqs = [523, 659, 784, 1047]; // C E G C
+        chordStabFreqs.forEach((f) => {
+          const o = this.ctx!.createOscillator();
+          const g = this.ctx!.createGain();
+          o.type = 'square';
+          o.frequency.value = f;
+          o.connect(g); g.connect(this.ctx!.destination);
+          g.gain.setValueAtTime(0.12, now + chordStabT);
+          g.gain.exponentialRampToValueAtTime(0.001, now + chordStabT + 0.6);
+          o.start(now + chordStabT); o.stop(now + chordStabT + 0.65);
+        });
         break;
       }
+
+      case 'gameover':
+        // Quick buzz — descending sawtooth ~0.9s
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(500, now);
+        osc.frequency.exponentialRampToValueAtTime(100, now + 0.8);
+        gain.gain.setValueAtTime(0.3, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.9);
+        osc.start(now);
+        osc.stop(now + 0.9);
+        break;
     }
   }
 
-  startBGM(): void {
-    if (!this.ctx || this.bgmPlaying) return;
-    this.bgmPlaying = true;
+  startBGM(track: BGMTrack): void {
+    if (!this.ctx) return;
+    if (this.currentBGM === track) return; // already playing
 
-    // Master gain for BGM (keep it quiet so SFX shine)
+    this.stopBGM();
+    this.currentBGM = track;
+
     this.bgmGain = this.ctx.createGain();
-    this.bgmGain.gain.value = 0.08;
+    this.bgmGain.gain.value = track === 'lobby' ? 0.08 : 0.10;
     this.bgmGain.connect(this.ctx.destination);
 
-    this.playLoop();
+    if (track === 'lobby') {
+      this.lobbyLoop();
+    } else {
+      this.gameLoop();
+    }
   }
 
   stopBGM(): void {
-    this.bgmPlaying = false;
     if (this.bgmTimeout !== null) {
       clearTimeout(this.bgmTimeout);
       this.bgmTimeout = null;
     }
-    if (this.bgmGain) {
-      this.bgmGain.gain.exponentialRampToValueAtTime(0.001, this.ctx!.currentTime + 0.3);
+    if (this.bgmGain && this.ctx) {
+      this.bgmGain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.3);
     }
+    this.bgmGain = null;
+    this.currentBGM = null;
   }
 
-  private playLoop(): void {
-    if (!this.ctx || !this.bgmPlaying || !this.bgmGain) return;
+  // ─── ARPEGGIO AMBIENT — Lobby ───
+  // 90 BPM, dreamy arpeggios with soft triangle pad
+  private lobbyLoop(): void {
+    if (!this.ctx || this.currentBGM !== 'lobby' || !this.bgmGain) return;
 
-    // Cute 8-bit melody — bouncy, Pacman-inspired chiptune
-    // Notes in Hz (C major pentatonic + some fun chromatic touches)
-    const melody = [
-      // Bar 1 — bouncy ascending
-      523, 587, 659, 784,  523, 587, 659, 784,
-      // Bar 2 — playful descent
-      880, 784, 659, 587,  523, 587, 659, 523,
-      // Bar 3 — hop hop
-      659, 0, 659, 0,  784, 0, 784, 0,
-      // Bar 4 — resolution
-      880, 784, 659, 784,  880, 1047, 880, 784,
-      // Bar 5 — variation ascending
-      392, 440, 523, 587,  659, 587, 523, 440,
-      // Bar 6 — syncopated
-      523, 0, 659, 523,  784, 0, 659, 784,
-      // Bar 7 — high energy
-      880, 988, 1047, 988,  880, 784, 659, 784,
-      // Bar 8 — ending phrase
-      880, 784, 659, 523,  587, 659, 523, 0,
+    const bpm = 90;
+    const sn = 60 / bpm / 4; // 16th note
+
+    const arp = [
+      523, 659, 784, 988, 1175, 988, 784, 659,
+      494, 587, 698, 880, 1047, 880, 698, 587,
+      440, 523, 659, 784, 988, 784, 659, 523,
+      392, 494, 587, 740, 880, 740, 587, 494,
     ];
+    const pad = [262, 262, 262, 262, 247, 247, 247, 247, 220, 220, 220, 220, 196, 196, 196, 196];
 
-    // Bass line (lower octave, simple root notes)
-    const bass = [
-      262, 262, 262, 262,  294, 294, 294, 294,
-      330, 330, 330, 330,  262, 262, 262, 262,
-      330, 330, 330, 330,  392, 392, 392, 392,
-      440, 440, 440, 440,  392, 392, 392, 392,
-      196, 196, 196, 196,  220, 220, 220, 220,
-      262, 262, 262, 262,  294, 294, 294, 294,
-      330, 330, 330, 330,  392, 392, 392, 392,
-      440, 440, 330, 262,  294, 330, 262, 262,
-    ];
-
-    const bpm = 160;
-    const noteLen = 60 / bpm / 2; // sixteenth notes
     const now = this.ctx.currentTime;
 
-    // Play melody
-    melody.forEach((freq, i) => {
-      if (freq === 0) return; // rest
+    // Arpeggio (sine)
+    arp.forEach((freq, i) => {
       const osc = this.ctx!.createOscillator();
-      const gain = this.ctx!.createGain();
-      osc.type = 'square';
+      const g = this.ctx!.createGain();
+      osc.type = 'sine';
       osc.frequency.value = freq;
-      osc.connect(gain);
-      gain.connect(this.bgmGain!);
-
-      const t = now + i * noteLen;
-      gain.gain.setValueAtTime(0.6, t);
-      gain.gain.exponentialRampToValueAtTime(0.01, t + noteLen * 0.85);
+      osc.connect(g);
+      g.connect(this.bgmGain!);
+      const t = now + i * sn;
+      g.gain.setValueAtTime(0.2, t);
+      g.gain.exponentialRampToValueAtTime(0.01, t + sn * 1.05);
       osc.start(t);
-      osc.stop(t + noteLen * 0.9);
+      osc.stop(t + sn * 1.1);
     });
 
-    // Play bass
-    bass.forEach((freq, i) => {
-      if (freq === 0) return;
+    // Pad (triangle, held longer)
+    pad.forEach((freq, i) => {
       const osc = this.ctx!.createOscillator();
-      const gain = this.ctx!.createGain();
+      const g = this.ctx!.createGain();
       osc.type = 'triangle';
       osc.frequency.value = freq;
-      osc.connect(gain);
-      gain.connect(this.bgmGain!);
-
-      const t = now + i * noteLen;
-      gain.gain.setValueAtTime(0.4, t);
-      gain.gain.exponentialRampToValueAtTime(0.01, t + noteLen * 0.8);
+      osc.connect(g);
+      g.connect(this.bgmGain!);
+      const t = now + i * sn * 2;
+      g.gain.setValueAtTime(0.18, t);
+      g.gain.exponentialRampToValueAtTime(0.01, t + sn * 2.2);
       osc.start(t);
-      osc.stop(t + noteLen * 0.85);
+      osc.stop(t + sn * 2.3);
     });
 
-    // Schedule next loop
-    const loopDuration = melody.length * noteLen * 1000;
-    this.bgmTimeout = window.setTimeout(() => {
-      this.playLoop();
-    }, loopDuration);
+    const loopDurationMs = arp.length * sn * 1000;
+    this.bgmTimeout = window.setTimeout(() => this.lobbyLoop(), loopDurationMs);
+  }
+
+  // ─── HAPPY ADVENTURE BOUNCE — Gameplay ───
+  // 160 BPM, bright major key with sparkly high notes
+  private gameLoop(): void {
+    if (!this.ctx || this.currentBGM !== 'game' || !this.bgmGain) return;
+
+    const bpm = 160;
+    const sn = 60 / bpm / 2; // 8th note
+
+    const melody = [
+      659, 784, 880, 1047, 880, 784, 880, 659,
+      587, 659, 784, 880, 784, 659, 587, 523,
+      659, 784, 988, 1175, 988, 784, 988, 659,
+      1047, 988, 880, 784, 880, 659, 784, 880,
+    ];
+    const bass = [
+      262, 262, 330, 330, 262, 262, 330, 330,
+      196, 196, 262, 262, 196, 196, 262, 262,
+      262, 262, 330, 330, 262, 262, 330, 330,
+      349, 349, 330, 330, 262, 262, 196, 262,
+    ];
+    const sparkle = [
+      1568, 0, 0, 2093, 0, 0, 1568, 0,
+      0, 0, 1760, 0, 0, 0, 1568, 0,
+      1568, 0, 0, 2349, 0, 0, 1976, 0,
+      0, 0, 2093, 0, 0, 0, 1568, 0,
+    ];
+
+    const now = this.ctx.currentTime;
+
+    // Melody (square)
+    melody.forEach((freq, i) => {
+      const osc = this.ctx!.createOscillator();
+      const g = this.ctx!.createGain();
+      osc.type = 'square';
+      osc.frequency.value = freq;
+      osc.connect(g);
+      g.connect(this.bgmGain!);
+      const t = now + i * sn;
+      g.gain.setValueAtTime(0.28, t);
+      g.gain.exponentialRampToValueAtTime(0.01, t + sn * 0.85);
+      osc.start(t);
+      osc.stop(t + sn * 0.9);
+    });
+
+    // Bass (triangle)
+    bass.forEach((freq, i) => {
+      const osc = this.ctx!.createOscillator();
+      const g = this.ctx!.createGain();
+      osc.type = 'triangle';
+      osc.frequency.value = freq;
+      osc.connect(g);
+      g.connect(this.bgmGain!);
+      const t = now + i * sn;
+      g.gain.setValueAtTime(0.22, t);
+      g.gain.exponentialRampToValueAtTime(0.01, t + sn * 0.8);
+      osc.start(t);
+      osc.stop(t + sn * 0.85);
+    });
+
+    // Sparkle (sine)
+    sparkle.forEach((freq, i) => {
+      if (freq === 0) return;
+      const osc = this.ctx!.createOscillator();
+      const g = this.ctx!.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+      osc.connect(g);
+      g.connect(this.bgmGain!);
+      const t = now + i * sn;
+      g.gain.setValueAtTime(0.1, t);
+      g.gain.exponentialRampToValueAtTime(0.01, t + sn * 0.5);
+      osc.start(t);
+      osc.stop(t + sn * 0.55);
+    });
+
+    const loopDurationMs = melody.length * sn * 1000;
+    this.bgmTimeout = window.setTimeout(() => this.gameLoop(), loopDurationMs);
   }
 }
 

@@ -10,6 +10,10 @@ export class HowToPlayScene extends Phaser.Scene {
     const W = 480, H = 720;
     const font = '"Press Start 2P", monospace';
 
+    // Ensure lobby music is playing (idempotent)
+    audioSystem.init();
+    audioSystem.startBGM('lobby');
+
     // Background — same as start screen
     const bg = this.add.image(W / 2, H / 2, 'game-over-bg');
     const bgScale = Math.max(W / bg.width, H / bg.height);
@@ -31,34 +35,29 @@ export class HowToPlayScene extends Phaser.Scene {
       fontFamily: font, fontSize: '8px', color: '#FFFFFF',
     }).setOrigin(0.5).setDepth(50);
     backBtnG.on('pointerdown', () => {
+      audioSystem.init();
       audioSystem.play('click');
       this.scene.start('StartScene');
     });
 
-    // ─── HOW TO PLAY header ─── y=28
-    this.add.text(W / 2, 28, '●  HOW TO PLAY  ●', {
-      fontFamily: font, fontSize: '16px', color: '#00D2C8',
-      stroke: '#000', strokeThickness: 2,
-    }).setOrigin(0.5);
-
     // ─── MEET TRIPPIE ─── y=55-130
-    const face = this.add.image(160, 103, 'trippie-face');
+    const face = this.add.image(160, 100, 'trippie-face');
     face.setScale(100 / face.width);
 
     const meetX = face.x + 50 + 14;
-    this.add.text(meetX, 85, 'MEET', {
+    this.add.text(meetX, 82, 'MEET', {
       fontFamily: font, fontSize: '24px', color: '#D8B4FE',
       stroke: '#000', strokeThickness: 4,
     });
-    this.add.text(meetX, 117, 'TRIPPIE', {
+    this.add.text(meetX, 114, 'TRIPPIE', {
       fontFamily: font, fontSize: '24px', color: '#FFFFFF',
       stroke: '#000', strokeThickness: 4,
     });
 
     // ─── Description pill ─── y=170 (more space from Meet Trippie)
-    const descText = this.add.text(W / 2, 187, 'TRIPPIE IS LOST IN THE AIRPORT MAZE.\nHELP TRIPPIE FIND HIS WAY HOME.', {
-      fontFamily: font, fontSize: '8px', color: '#1a1a2e',
-      align: 'center', lineSpacing: 8,
+    const descText = this.add.text(W / 2, 184, 'TRIPPIE IS LOST IN THE AIRPORT MAZE.\nHELP TRIPPIE FIND HIS WAY HOME.', {
+      fontFamily: font, fontSize: '10px', color: '#1a1a2e',
+      align: 'center', lineSpacing: 10,
     }).setOrigin(0.5, 0.5).setDepth(1);
 
     const db = descText.getBounds();
@@ -68,23 +67,23 @@ export class HowToPlayScene extends Phaser.Scene {
     descG.lineStyle(1.5, 0xC4B5FD, 1);
     descG.strokeRoundedRect(db.x - 18, db.y - 12, db.width + 36, db.height + 24, 8);
 
-    // ─── CHOMP ON POWER PELLETS ─── y=243
-    this.add.text(W / 2, 253, '●  CHOMP ON POWER PELLETS  ●', {
-      fontFamily: font, fontSize: '9px', color: '#00D2C8',
+    // ─── CHOMP ON POWER PELLETS ─── y=258
+    this.add.text(W / 2, 258, '●  CHOMP ON POWER PELLETS  ●', {
+      fontFamily: font, fontSize: '12px', color: '#00D2C8',
       stroke: '#000', strokeThickness: 2,
     }).setOrigin(0.5);
 
     // 4 item cards — y=252
     const items = [
-      { key: 'passport', name: 'PASSPORT', desc: 'Teleport', color: '#FF6B6B' },
-      { key: 'card', name: 'YOUTRIP', desc: 'Chomp monsters', color: '#D8B4FE' },
-      { key: 'airplane', name: 'PLANE', desc: 'Speed boost', color: '#E0E0E0' },
-      { key: 'globe', name: 'GLOBE', desc: 'Freeze monsters', color: '#4FC3F7' },
+      { key: 'passport', name: 'PASSPORT', desc: 'Ability to\nteleport', color: '#FF6B6B' },
+      { key: 'card', name: 'YOUTRIP', desc: 'Chomp on\nmonsters', color: '#D8B4FE' },
+      { key: 'airplane', name: 'PLANE', desc: 'Speed\nboost', color: '#E0E0E0' },
+      { key: 'globe', name: 'LOCK', desc: 'Freeze\nmonsters', color: '#4FC3F7' },
     ];
-    const cardW = 95, cardH = 105, cardGap = 12;
+    const cardW = 105, cardH = 135, cardGap = 10;
     const totalCardsW = items.length * cardW + (items.length - 1) * cardGap;
     const cardsStartX = (W - totalCardsW) / 2;
-    const cardsY = 277;
+    const cardsY = 282;
 
     items.forEach((item, i) => {
       const cx = cardsStartX + i * (cardW + cardGap) + cardW / 2;
@@ -98,56 +97,57 @@ export class HowToPlayScene extends Phaser.Scene {
       sprite.setScale(44 / Math.max(sprite.width, sprite.height));
       bounceTargets.push(sprite);
 
-      this.add.text(cx, cardsY + 70, item.name, {
-        fontFamily: font, fontSize: '7px', color: item.color,
+      this.add.text(cx, cardsY + 72, item.name, {
+        fontFamily: font, fontSize: '10px', color: item.color,
         stroke: '#000', strokeThickness: 2,
       }).setOrigin(0.5);
-      this.add.text(cx, cardsY + 88, item.desc, {
-        fontFamily: font, fontSize: '6px', color: '#FFFFFF',
-        stroke: '#000', strokeThickness: 2,
+      this.add.text(cx, cardsY + 104, item.desc, {
+        fontFamily: font, fontSize: '9px', color: '#FFFFFF',
+        stroke: '#000', strokeThickness: 2, align: 'center', lineSpacing: 6,
       }).setOrigin(0.5);
     });
 
-    // ─── DODGE FEE MONSTERS ─── y=415
-    this.add.text(W / 2, 425, '●  DODGE FEE MONSTERS  ●', {
-      fontFamily: font, fontSize: '9px', color: '#00D2C8',
+    // ─── DODGE FEE MONSTERS ─── y=450
+    this.add.text(W / 2, 450, '●  DODGE FEE MONSTERS  ●', {
+      fontFamily: font, fontSize: '12px', color: '#00D2C8',
       stroke: '#000', strokeThickness: 2,
     }).setOrigin(0.5);
 
-    // Ghost cards — y=406
+    // Ghost combined card — 3 fee monsters in one card
     const ghosts = [
-      { key: 'chaser', name: 'CHASER', desc: "Follows you. Don't let him catch up.", color: '#4FFFB0' },
-      { key: 'ambusher', name: 'AMBUSHER', desc: 'Cuts you off 4 tiles ahead.', color: '#FF8A65' },
+      { key: 'monster-blue', name: 'CHASER', color: '#4FC3F7' },
+      { key: 'monster-green', name: 'AMBUSHER', color: '#7CDB52' },
+      { key: 'monster-orange', name: 'PATROLLER', color: '#FF6B9D' },
     ];
-    const ghostCardW = 400, ghostCardH = 65, ghostGap = 10;
-    const ghostStartY = 449;
+    const ghostCardW = 400, ghostCardH = 130;
+    const ghostCardX = W / 2;
+    const ghostCardY = 470;
 
+    // Card background
+    const ghostCardG = this.add.graphics();
+    ghostCardG.fillStyle(0x1a1a3e, 0.7);
+    ghostCardG.fillRoundedRect(ghostCardX - ghostCardW / 2, ghostCardY, ghostCardW, ghostCardH, 12);
+    ghostCardG.lineStyle(1.5, 0x3a3a6e, 0.8);
+    ghostCardG.strokeRoundedRect(ghostCardX - ghostCardW / 2, ghostCardY, ghostCardW, ghostCardH, 12);
+
+    // 3 columns inside
+    const colW = ghostCardW / 3;
     ghosts.forEach((ghost, i) => {
-      const gy = ghostStartY + i * (ghostCardH + ghostGap);
-      const gx = W / 2;
-      const gg = this.add.graphics();
-      gg.fillStyle(0x1a1a3e, 0.7);
-      gg.fillRoundedRect(gx - ghostCardW / 2, gy, ghostCardW, ghostCardH, 10);
-      gg.lineStyle(1.5, Phaser.Display.Color.HexStringToColor(ghost.color).color, 0.6);
-      gg.strokeRoundedRect(gx - ghostCardW / 2, gy, ghostCardW, ghostCardH, 10);
+      const cx = ghostCardX - ghostCardW / 2 + colW * (i + 0.5);
 
-      const sprite = this.add.image(gx - ghostCardW / 2 + 40, gy + ghostCardH / 2, ghost.key);
-      sprite.setScale(38 / Math.max(sprite.width, sprite.height));
+      const sprite = this.add.image(cx, ghostCardY + 50, ghost.key);
+      sprite.setScale(58 / Math.max(sprite.width, sprite.height));
       bounceTargets.push(sprite);
 
-      this.add.text(gx - ghostCardW / 2 + 80, gy + 16, ghost.name, {
+      this.add.text(cx, ghostCardY + 100, ghost.name, {
         fontFamily: font, fontSize: '11px', color: ghost.color,
         stroke: '#000', strokeThickness: 2,
-      });
-      this.add.text(gx - ghostCardW / 2 + 80, gy + 38, ghost.desc, {
-        fontFamily: font, fontSize: '7px', color: '#FFFFFF',
-        stroke: '#000', strokeThickness: 2, wordWrap: { width: 280 },
-      });
+      }).setOrigin(0.5);
     });
 
-    // ─── START GAME button ─── y=660 (near bottom)
+    // ─── START GAME button ─── shifted up
     const btnW = 320, btnH = 56;
-    const btnY = 665;
+    const btnY = 645;
     const btnG = this.add.graphics();
     btnG.fillStyle(0x00D2C8, 1);
     btnG.fillRoundedRect(W / 2 - btnW / 2, btnY - btnH / 2, btnW, btnH, btnH / 2);
@@ -162,7 +162,12 @@ export class HowToPlayScene extends Phaser.Scene {
       fontFamily: font, fontSize: '16px', color: '#0D0D1A', letterSpacing: 2,
     }).setOrigin(0.5).setDepth(1);
 
-    const startGame = () => { audioSystem.play('click'); this.scene.start('GameScene'); };
+    const startGame = () => {
+      audioSystem.init();
+      audioSystem.play('click');
+      audioSystem.startBGM('game');
+      this.scene.start('GameScene');
+    };
     btnG.on('pointerdown', startGame);
     this.input.keyboard?.on('keydown-ENTER', startGame);
     this.input.keyboard?.on('keydown-SPACE', startGame);

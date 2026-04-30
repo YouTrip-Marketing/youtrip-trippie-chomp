@@ -99,6 +99,7 @@ export class StartScene extends Phaser.Scene {
     const startGame = () => {
       audioSystem.init();
       audioSystem.play('click');
+      audioSystem.startBGM('lobby');
       this.scene.start('HowToPlayScene');
     };
 

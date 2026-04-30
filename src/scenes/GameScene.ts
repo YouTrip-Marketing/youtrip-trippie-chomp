@@ -44,6 +44,9 @@ export class GameScene extends Phaser.Scene {
   private boostTimer: number = 0;
   private popupTimer: number = 0;
   private popupText: string = '';
+  private popupGlow!: Phaser.GameObjects.Graphics;
+  private popupTween?: Phaser.Tweens.Tween;
+  private screenFlash?: Phaser.GameObjects.Rectangle;
   private dyingTimer: number = 0;
   private levelWinTimer: number = 0;
 
@@ -90,8 +93,8 @@ export class GameScene extends Phaser.Scene {
     this.totalDotsEaten = 0;
     this.totalGhostsEaten = 0;
 
-    // Start background music
-    audioSystem.startBGM();
+    // Start gameplay music
+    audioSystem.startBGM('game');
 
     this.calculateLayout();
     this.setupRendering();
@@ -137,10 +140,10 @@ export class GameScene extends Phaser.Scene {
       this.bonusSprites.push(bonus);
     }
 
-    // Ghost sprites — 4
+    // Ghost sprites — 3 fee monsters
     this.ghostSprites = [];
-    for (let i = 0; i < 4; i++) {
-      const ghost = this.add.image(0, 0, 'chaser');
+    for (let i = 0; i < 3; i++) {
+      const ghost = this.add.image(0, 0, 'monster-blue');
       ghost.setVisible(false);
       this.ghostSprites.push(ghost);
     }
@@ -186,13 +189,23 @@ export class GameScene extends Phaser.Scene {
     this.levelText = this.add.text(W / 2, hudRow, 'LVL: 1', hudStyle).setOrigin(0.5, 0);
     this.livesContainer = this.add.container(W - 10, hudRow);
 
-    // Popup text
+    // Screen flash (full canvas) — for level up glow
+    this.screenFlash = this.add.rectangle(W / 2, H / 2, W, H, 0xFFFFFF, 0)
+      .setDepth(98).setVisible(false);
+
+    // Popup glow (radial graphics behind text)
+    this.popupGlow = this.add.graphics();
+    this.popupGlow.setDepth(99);
+    this.popupGlow.setAlpha(0);
+
+    // Popup text — fixed bigger size for visibility
     this.popupTextObj = this.add.text(W / 2, H / 2, '', {
       fontFamily: '"Press Start 2P", monospace',
-      fontSize: `${Math.round(this.tileSize * 0.85)}px`,
+      fontSize: '28px',
       color: '#00D2C8',
       stroke: '#000000',
-      strokeThickness: 4,
+      strokeThickness: 5,
+      align: 'center',
     }).setOrigin(0.5).setAlpha(0).setDepth(100);
   }
 
@@ -206,21 +219,25 @@ export class GameScene extends Phaser.Scene {
       D: this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.D),
     };
 
-    // Touch/swipe
-    this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
-      this.touchStartX = pointer.x;
-      this.touchStartY = pointer.y;
-    });
+    // Native touch events on document — exact port of v1's swipe logic
+    const onTouchStart = (e: TouchEvent) => {
+      if (e.touches.length === 0) return;
+      this.touchStartX = e.touches[0].clientX;
+      this.touchStartY = e.touches[0].clientY;
+      if (this.gameState === 'playing') e.preventDefault();
+    };
 
-    this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
-      if (!pointer.isDown) return;
+    const onTouchMove = (e: TouchEvent) => {
+      if (this.gameState === 'playing') e.preventDefault();
       if (this.gameState !== 'playing') return;
+      if (e.touches.length === 0) return;
 
-      const dx = pointer.x - this.touchStartX;
-      const dy = pointer.y - this.touchStartY;
+      const dx = e.touches[0].clientX - this.touchStartX;
+      const dy = e.touches[0].clientY - this.touchStartY;
       const absDx = Math.abs(dx);
       const absDy = Math.abs(dy);
 
+      // 5px threshold like v1 — prevents jitter from flipping direction
       if (Math.max(absDx, absDy) < 5) return;
 
       if (absDx > absDy) {
@@ -230,8 +247,17 @@ export class GameScene extends Phaser.Scene {
       }
 
       // Reset origin for continuous chained swipes
-      this.touchStartX = pointer.x;
-      this.touchStartY = pointer.y;
+      this.touchStartX = e.touches[0].clientX;
+      this.touchStartY = e.touches[0].clientY;
+    };
+
+    document.addEventListener('touchstart', onTouchStart, { passive: false });
+    document.addEventListener('touchmove', onTouchMove, { passive: false });
+
+    // Clean up on scene shutdown
+    this.events.once('shutdown', () => {
+      document.removeEventListener('touchstart', onTouchStart);
+      document.removeEventListener('touchmove', onTouchMove);
     });
   }
 
@@ -240,7 +266,7 @@ export class GameScene extends Phaser.Scene {
     this.dotsLeft = countDots(this.map);
     this.player = new Player(this.level);
     this.ghosts = [];
-    for (let i = 0; i < 4; i++) {
+    for (let i = 0; i < 3; i++) {
       this.ghosts.push(new Ghost(i, this.level));
     }
     this.powerTimer = 0;
@@ -258,7 +284,7 @@ export class GameScene extends Phaser.Scene {
   private resetAfterDeath(): void {
     this.player = new Player(this.level);
     this.ghosts = [];
-    for (let i = 0; i < 4; i++) {
+    for (let i = 0; i < 3; i++) {
       this.ghosts.push(new Ghost(i, this.level));
     }
     this.powerTimer = 0;
@@ -305,6 +331,7 @@ export class GameScene extends Phaser.Scene {
       this.lives--;
       if (this.lives <= 0) {
         audioSystem.stopBGM();
+        audioSystem.play('gameover');
         this.scene.start('GameOverScene', {
           score: this.score,
           level: this.level,
@@ -382,14 +409,13 @@ export class GameScene extends Phaser.Scene {
     } else if (tile === POWER) {
       this.map[row][col] = EMPTY;
       this.score += SCORE_POWER;
-      this.dotsLeft--;
-      this.totalDotsEaten++;
+      // Don't decrement dotsLeft — power pellets don't gate level-up
       this.powerTimer = POWER_DURATION;
       this.ghostScore = SCORE_GHOST_BASE;
       this.ghosts.forEach(g => {
         if (!g.eaten && !g.home && !g.respawning) g.scared = true;
       });
-      this.showPopup('FEE MONSTERS ARE DEAD!');
+      this.showPopup('CHOMP ON FEE MONSTERS!');
       audioSystem.play('power');
       this.drawMaze();
     }
@@ -466,6 +492,54 @@ export class GameScene extends Phaser.Scene {
   private showPopup(text: string): void {
     this.popupText = text;
     this.popupTimer = POPUP_DURATION;
+
+    // Stop any in-flight tween
+    if (this.popupTween) this.popupTween.stop();
+
+    const isLevelUp = text === 'LEVEL UP!';
+    const popupColor = isLevelUp ? '#FFD700' : '#00D2C8';
+    // Auto-size font based on text length so it always fits within 460px (480 canvas - margin)
+    // Press Start 2P chars are roughly 1.0x font size wide
+    const maxWidth = 460;
+    let fontSize: string;
+    if (isLevelUp) {
+      fontSize = '40px';
+    } else {
+      const len = text.length;
+      const idealSize = Math.floor(maxWidth / len);
+      fontSize = `${Math.max(14, Math.min(24, idealSize))}px`;
+    }
+
+    // Configure text
+    this.popupTextObj.setText(text);
+    this.popupTextObj.setColor(popupColor);
+    this.popupTextObj.setFontSize(fontSize);
+    this.popupTextObj.setScale(0.4);
+    this.popupTextObj.setAlpha(0);
+
+    // Bounce-in scale + fade-in
+    this.popupTween = this.tweens.add({
+      targets: this.popupTextObj,
+      scale: { from: 0.4, to: 1.0 },
+      alpha: { from: 0, to: 1 },
+      duration: 280,
+      ease: 'Back.easeOut',
+      onComplete: () => {
+        // Hold, then fade out
+        this.tweens.add({
+          targets: this.popupTextObj,
+          alpha: 0,
+          scale: 1.15,
+          duration: 400,
+          delay: POPUP_DURATION - 280 - 400,
+          ease: 'Sine.easeIn',
+        });
+      },
+    });
+
+    // No glow — just the text animation
+    this.popupGlow.clear();
+    this.popupGlow.setAlpha(0);
   }
 
   private updateHUD(): void {
@@ -600,19 +674,19 @@ export class GameScene extends Phaser.Scene {
     if (this.gameState === 'dying') {
       const progress = 1 - this.dyingTimer / DYING_DURATION;
       if (this.dyingTimer > 0 && Math.floor(this.dyingTimer / 166) % 2 > 0) {
-        const size = T * 1.6 * (1 - progress);
+        const targetSize = T * 1.7 * (1 - progress);
         const px = this.offsetX + this.player.px * T + half;
         const py = this.offsetY + this.player.py * T + half;
-        pSprite.setPosition(px, py);
-        pSprite.setDisplaySize(size, size);
-        pSprite.setAlpha(1 - progress);
         pSprite.setTexture(this.getPlayerTexture());
+        pSprite.setPosition(px, py);
+        pSprite.setScale(targetSize / Math.max(pSprite.width, pSprite.height));
+        pSprite.setAlpha(1 - progress);
         pSprite.setVisible(true);
       } else {
         pSprite.setVisible(false);
       }
     } else {
-      const size = T * 1.6;
+      const targetSize = T * 1.7;
       const px = this.offsetX + this.player.px * T + half;
       const py = this.offsetY + this.player.py * T + half;
 
@@ -623,7 +697,7 @@ export class GameScene extends Phaser.Scene {
 
       pSprite.setTexture(this.getPlayerTexture());
       pSprite.setPosition(px, py);
-      pSprite.setDisplaySize(size, size);
+      pSprite.setScale(targetSize / Math.max(pSprite.width, pSprite.height));
       pSprite.setAlpha(alpha);
       pSprite.setVisible(true);
 
@@ -650,7 +724,7 @@ export class GameScene extends Phaser.Scene {
       const g = this.ghosts[i];
       const gs = this.ghostSprites[i];
 
-      if (g.home || g.respawning) {
+      if (g.respawning) {
         gs.setVisible(false);
         continue;
       }
@@ -666,13 +740,15 @@ export class GameScene extends Phaser.Scene {
         textureKey = g.spriteKey;
       }
 
-      const size = T * 1.6;
+      const targetSize = T * 1.9;
       const gx = this.offsetX + g.px * T + half;
       const gy = this.offsetY + g.py * T + half;
 
       gs.setTexture(textureKey);
       gs.setPosition(gx, gy);
-      gs.setDisplaySize(size, size);
+      // Use setScale to preserve sprite aspect ratio (monsters aren't square)
+      const scale = targetSize / Math.max(gs.width, gs.height);
+      gs.setScale(scale);
       gs.setVisible(true);
 
       if (g.eaten) {
@@ -684,30 +760,27 @@ export class GameScene extends Phaser.Scene {
           gs.setAlpha(1);
         }
         this.entityGraphics.fillStyle(0x4FC3F7, 0.3);
-        this.entityGraphics.fillRect(gx - size / 2, gy - size / 2, size, size);
+        this.entityGraphics.fillRect(gx - targetSize / 2, gy - targetSize / 2, targetSize, targetSize);
       } else {
         gs.setAlpha(1);
       }
     }
 
-    // Popup text
-    if (this.popupTimer > 0) {
-      const fadeIn = Math.min(1, (POPUP_DURATION - this.popupTimer) / 200);
-      const fadeOut = Math.min(1, this.popupTimer / 300);
-      const alpha = Math.min(fadeIn, fadeOut);
-      this.popupTextObj.setText(this.popupText);
-      this.popupTextObj.setAlpha(alpha);
-    } else {
-      this.popupTextObj.setAlpha(0);
-    }
+    // Popup text alpha is now managed by tweens in showPopup()
   }
 
   private getPlayerTexture(): string {
+    const dir = this.player.dir;
     const mouthOpen = this.player.mouthAngle > 0.18;
-    if (this.player.lastHDir === 'right') {
-      return mouthOpen ? 'trippie-b' : 'trippie-a';
-    } else {
-      return mouthOpen ? 'trippie-c' : 'trippie-d';
+
+    // For UP/DOWN, use the last horizontal direction (no front-facing sprite)
+    let facingRight = this.player.lastHDir === 'right';
+    if (dir === Direction.RIGHT) facingRight = true;
+    else if (dir === Direction.LEFT) facingRight = false;
+
+    if (facingRight) {
+      return mouthOpen ? 'trippie-right-open' : 'trippie-a';
     }
+    return mouthOpen ? 'trippie-left-open' : 'trippie-d';
   }
 }

@@ -56,8 +56,8 @@ export const SCORE_POWER = 50;
 export const SCORE_BONUS = 100;
 export const SCORE_GHOST_BASE = 200;
 
-// Ghost release timers (in homeTimer ticks, converted from v1: homeTimer / 0.06 per tick)
-export const GHOST_HOME_TIMERS = [0, 3000, 7000, 11000]; // ms
+// Ghost release timers — staggered exit from pen
+export const GHOST_HOME_TIMERS = [1500, 5000, 9000]; // ms
 
 // Popup
 export const POPUP_DURATION = 2000;
@@ -71,32 +71,29 @@ export const PLAYER_START = { col: 9, row: 15 };
 // Ghost pen position
 export const GHOST_PEN_EXIT = { col: 9, row: 7 };
 
-// Ghost start positions
+// Ghost start positions — all 3 inside the pen, waiting to exit (classic Pacman style)
 export const GHOST_STARTS = [
-  { col: 9, row: 7 },   // chaser - at exit
-  { col: 8, row: 9 },   // ambusher - in pen
-  { col: 10, row: 9 },  // patroller - in pen
-  { col: 9, row: 9 },   // shy - in pen
+  { col: 9, row: 9 },   // chaser - center of pen
+  { col: 8, row: 9 },   // ambusher - left of pen
+  { col: 10, row: 9 },  // patroller - right of pen
 ];
 
-// Ghost AI types
-export type GhostAI = 'chase' | 'ambush' | 'patrol' | 'shy';
-export const GHOST_AI_TYPES: GhostAI[] = ['chase', 'ambush', 'patrol', 'shy'];
+// Ghost AI types — 3 fee monsters
+export type GhostAI = 'chase' | 'ambush' | 'patrol';
+export const GHOST_AI_TYPES: GhostAI[] = ['chase', 'ambush', 'patrol'];
 
 // Ghost sprite mapping
 export const GHOST_SPRITES: Record<GhostAI, string> = {
-  chase: 'chaser',
-  ambush: 'ambusher',
-  patrol: 'ambusher',
-  shy: 'chaser',
+  chase: 'monster-blue',
+  ambush: 'monster-green',
+  patrol: 'monster-orange',
 };
 
 // Ghost speed multipliers
 export const GHOST_SPEED_MULTS: Record<GhostAI, number> = {
   chase: 1,
   ambush: 1,
-  patrol: 0.8,
-  shy: 0.95,
+  patrol: 0.85,
 };
 
 // Patrol waypoints

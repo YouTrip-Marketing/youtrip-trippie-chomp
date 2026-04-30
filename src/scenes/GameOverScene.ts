@@ -39,6 +39,7 @@ export class GameOverScene extends Phaser.Scene {
     }).setOrigin(0.5).setDepth(50);
     introBtnG.on('pointerdown', () => {
       audioSystem.play('click');
+      audioSystem.startBGM('lobby');
       this.scene.start('HowToPlayScene');
     });
 
@@ -72,12 +73,12 @@ export class GameOverScene extends Phaser.Scene {
     coins.setScale(coinsScale);
 
     // Score
-    this.add.text(cardX, cardTop + 250, `YOU SAVED S$${this.stats.score}!`, {
+    this.add.text(cardX, cardTop + 246, `YOU SAVED S$${this.stats.score}!`, {
       fontFamily: font,
-      fontSize: '14px',
+      fontSize: '20px',
       color: '#FFD700',
       stroke: '#000',
-      strokeThickness: 2,
+      strokeThickness: 3,
     }).setOrigin(0.5, 0);
 
     // Stats row

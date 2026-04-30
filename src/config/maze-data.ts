@@ -29,10 +29,11 @@ export function cloneMap(): number[][] {
 }
 
 export function countDots(map: number[][]): number {
+  // Count only DOT tiles (coins) — power pellets don't gate level-up
   let count = 0;
   for (let r = 0; r < map.length; r++) {
     for (let c = 0; c < map[r].length; c++) {
-      if (map[r][c] === 2 || map[r][c] === 3) count++;
+      if (map[r][c] === 2) count++;
     }
   }
   return count;

@@ -29,13 +29,13 @@ export class Ghost {
     this.row = start.row;
     this.px = start.col;
     this.py = start.row;
-    this.dir = index === 0 ? Direction.LEFT : (index === 3 ? Direction.DOWN : Direction.UP);
+    this.dir = Direction.UP; // all ghosts start in pen, face up to exit
     this.ai = GHOST_AI_TYPES[index];
     this.spriteKey = GHOST_SPRITES[this.ai];
     const baseSpeed = getGhostBaseSpeed(level);
     this.speed = baseSpeed * GHOST_SPEED_MULTS[this.ai];
     this.homeTimer = GHOST_HOME_TIMERS[index];
-    this.patrolIdx = index === 3 ? 1 : 0;
+    this.patrolIdx = 0;
   }
 
   private isWalkableForGhost(map: number[][], col: number, row: number, canPassGate: boolean): boolean {
@@ -74,20 +74,6 @@ export class Ghost {
           this.patrolIdx = (this.patrolIdx + 1) % PATROL_ROUTE.length;
         }
         return PATROL_ROUTE[this.patrolIdx];
-      }
-
-      case 'shy': {
-        const d = Math.abs(this.col - player.col) + Math.abs(this.row - player.row);
-        if (d > 8) {
-          return { col: player.col, row: player.row };
-        }
-        let bestCorner = PATROL_ROUTE[0];
-        let bestDist = 0;
-        for (const c of PATROL_ROUTE) {
-          const cd = Math.abs(c.col - player.col) + Math.abs(c.row - player.row);
-          if (cd > bestDist) { bestDist = cd; bestCorner = c; }
-        }
-        return bestCorner;
       }
 
       default:
