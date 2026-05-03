@@ -107,7 +107,7 @@ export const PATROL_ROUTE = [
 // Colors
 export const COLOR_BG = 0x0D0D1A;
 export const COLOR_WALL = 0x150D26;
-export const COLOR_WALL_BORDER = 0x2A1845;
+export const COLOR_WALL_BORDER = 0x4FC3F7;  // bright cyan — pops against any bg
 export const COLOR_DOT = 0xFFD700;
 export const COLOR_GATE = 0xFF69B4;
 export const COLOR_TEAL = 0x00D2C8;

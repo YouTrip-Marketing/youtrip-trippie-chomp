@@ -3,7 +3,7 @@ import { Player } from '../entities/Player';
 import { Ghost } from '../entities/Ghost';
 import { BonusData, spawnBonus, isBonusBlinking } from '../entities/BonusItem';
 import { audioSystem } from '../systems/AudioSystem';
-import { cloneMap, countDots } from '../config/maze-data';
+import { cloneMaze, countDots, analyzeMaze, type MazeMeta } from '../config/mazes';
 import {
   COLS, ROWS, WALL, DOT, POWER, EMPTY, GATE,
   Direction, STARTING_LIVES,
@@ -15,6 +15,7 @@ import {
   POPUP_DURATION,
   COLOR_WALL, COLOR_WALL_BORDER, COLOR_DOT, COLOR_GATE,
 } from '../config/constants';
+import { getLevelConfig } from '../config/levels';
 
 // Fixed game dimensions (must match main.ts)
 const W = 480;
@@ -26,6 +27,7 @@ type GameState = 'playing' | 'dying' | 'levelwin';
 export class GameScene extends Phaser.Scene {
   // Game state
   private map!: number[][];
+  private mazeMeta!: MazeMeta;
   private score: number = 0;
   private lives: number = STARTING_LIVES;
   private level: number = 1;
@@ -37,6 +39,7 @@ export class GameScene extends Phaser.Scene {
   private ghosts: Ghost[] = [];
 
   // Timers (in ms)
+  private bonusLevelTimer: number = 0;
   private powerTimer: number = 0;
   private ghostScore: number = SCORE_GHOST_BASE;
   private invincibleTimer: number = 0;
@@ -66,9 +69,12 @@ export class GameScene extends Phaser.Scene {
   private entityGraphics!: Phaser.GameObjects.Graphics;
   private scoreText!: Phaser.GameObjects.Text;
   private levelText!: Phaser.GameObjects.Text;
+  private muteText!: Phaser.GameObjects.Text;
   private livesContainer!: Phaser.GameObjects.Container;
   private popupTextObj!: Phaser.GameObjects.Text;
   private bgImage!: Phaser.GameObjects.Image;
+  private bgAnimSprites: Phaser.GameObjects.Image[] = [];
+  private bgAnimTweens: Phaser.Tweens.Tween[] = [];
 
   // Input
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
@@ -86,10 +92,18 @@ export class GameScene extends Phaser.Scene {
     super({ key: 'GameScene' });
   }
 
+  private parseStartLevel(): number {
+    const params = new URLSearchParams(window.location.search);
+    const raw = params.get('level');
+    if (!raw) return 1;
+    const n = parseInt(raw, 10);
+    return Number.isFinite(n) && n >= 1 ? n : 1;
+  }
+
   create(): void {
     this.score = 0;
     this.lives = STARTING_LIVES;
-    this.level = 1;
+    this.level = this.parseStartLevel();
     this.totalDotsEaten = 0;
     this.totalGhostsEaten = 0;
 
@@ -103,57 +117,69 @@ export class GameScene extends Phaser.Scene {
   }
 
   private calculateLayout(): void {
-    // Calculate tile size to fill the game canvas
-    const availW = W - 8;  // 4px padding each side
-    const availH = H - HUD_HEIGHT - 12; // HUD top + padding bottom
+    // Maze tiling — clear HUD text vertically (HUD text bottom ~y=66) and
+    // leave space below the maze for animated bg art.
+    const availW = W - 8;
+    const TOP_PAD = 28;      // clears HUD text + small gap
+    const BG_REVEAL = 110;   // exposed bg strip below maze
+    const availH = H - HUD_HEIGHT - TOP_PAD - BG_REVEAL;
     this.tileSize = Math.floor(Math.min(availW / COLS, availH / ROWS));
     this.tileSize = Math.max(this.tileSize, 10);
 
     const mazeW = COLS * this.tileSize;
     const mazeH = ROWS * this.tileSize;
     this.offsetX = (W - mazeW) / 2;
-    this.offsetY = HUD_HEIGHT + (H - HUD_HEIGHT - mazeH) / 2;
+    this.offsetY = HUD_HEIGHT + TOP_PAD;
   }
 
   private setupRendering(): void {
-    // Background — same as start screen (full opacity)
-    this.bgImage = this.add.image(W / 2, H / 2, 'game-over-bg');
+    // Background — per-level destination scene; swapped in applyLevelBackground()
+    // each time startLevel() runs. Initial texture matches the starting level.
+    const startBg = getLevelConfig(this.level).bgAsset;
+    this.bgImage = this.add.image(W / 2, H / 2, startBg);
     const bgScale = Math.max(W / this.bgImage.width, H / this.bgImage.height);
     this.bgImage.setScale(bgScale);
 
-    // Maze graphics layer
-    this.mazeGraphics = this.add.graphics();
+    // Animated bg layers are created per-level in applyLevelBackground via setupBgAnimations(cfg.bgAnimations).
 
-    // Card sprites (power pellets) — 4 corners
+    // Maze graphics layer — explicit depth above bg layers but below sprites/HUD
+    this.mazeGraphics = this.add.graphics();
+    this.mazeGraphics.setDepth(2);
+
+    // Card sprites (power pellets) — depth 3 (above maze)
     this.cardSprites = [];
     for (let i = 0; i < 4; i++) {
       const card = this.add.image(0, 0, 'card');
       card.setVisible(false);
+      card.setDepth(3);
       this.cardSprites.push(card);
     }
 
-    // Bonus sprites — up to 2 (teleport pair)
+    // Bonus sprites — depth 3
     this.bonusSprites = [];
     for (let i = 0; i < 2; i++) {
       const bonus = this.add.image(0, 0, 'airplane');
       bonus.setVisible(false);
+      bonus.setDepth(3);
       this.bonusSprites.push(bonus);
     }
 
-    // Ghost sprites — 3 fee monsters
+    // Ghost sprites — depth 3
     this.ghostSprites = [];
     for (let i = 0; i < 3; i++) {
       const ghost = this.add.image(0, 0, 'monster-blue');
       ghost.setVisible(false);
+      ghost.setDepth(3);
       this.ghostSprites.push(ghost);
     }
 
     // Entity graphics layer (overlays, trails)
     this.entityGraphics = this.add.graphics();
 
-    // Player sprite
+    // Player sprite — depth 4 (above maze at 2 and ghosts at 3)
     this.playerSprite = this.add.image(0, 0, 'trippie-a');
     this.playerSprite.setVisible(false);
+    this.playerSprite.setDepth(4);
 
     // ← INTRO button (top-left)
     const introBtnG = this.add.graphics();
@@ -189,6 +215,30 @@ export class GameScene extends Phaser.Scene {
     this.levelText = this.add.text(W / 2, hudRow, 'LVL: 1', hudStyle).setOrigin(0.5, 0);
     this.livesContainer = this.add.container(W - 10, hudRow);
 
+    // Brand subtitle under HUD — anchors the score framing to the campaign
+    this.add.text(16, hudRow + 14, 'FROM FOREIGN FEES', {
+      fontFamily: '"Press Start 2P", monospace',
+      fontSize: '6px',
+      color: '#FFD700',
+    }).setAlpha(0.7);
+
+    // Mute toggle — bottom-right corner
+    this.muteText = this.add.text(W - 14, H - 14, audioSystem.isMuted() ? '🔇' : '🔊', {
+      fontFamily: '"Press Start 2P", monospace',
+      fontSize: '18px',
+    }).setOrigin(1, 1).setDepth(60);
+    this.muteText.setInteractive({ useHandCursor: true });
+    this.muteText.on('pointerdown', () => {
+      const next = !audioSystem.isMuted();
+      audioSystem.setMuted(next);
+      this.muteText.setText(next ? '🔇' : '🔊');
+    });
+    this.input.keyboard?.on('keydown-M', () => {
+      const next = !audioSystem.isMuted();
+      audioSystem.setMuted(next);
+      this.muteText.setText(next ? '🔇' : '🔊');
+    });
+
     // Screen flash (full canvas) — for level up glow
     this.screenFlash = this.add.rectangle(W / 2, H / 2, W, H, 0xFFFFFF, 0)
       .setDepth(98).setVisible(false);
@@ -218,6 +268,18 @@ export class GameScene extends Phaser.Scene {
       S: this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.S),
       D: this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.D),
     };
+
+    // DEV ONLY — press N to clear remaining dots and trigger level-up.
+    // TODO: REMOVE BEFORE PRODUCTION LAUNCH.
+    this.input.keyboard!.on('keydown-N', () => {
+      for (let r = 0; r < this.map.length; r++) {
+        for (let c = 0; c < this.map[r].length; c++) {
+          if (this.map[r][c] === 2) this.map[r][c] = 0;
+        }
+      }
+      this.dotsLeft = 0;
+      this.bonusLevelTimer = 0;
+    });
 
     // Native touch events on document — exact port of v1's swipe logic
     const onTouchStart = (e: TouchEvent) => {
@@ -262,17 +324,37 @@ export class GameScene extends Phaser.Scene {
   }
 
   private startLevel(): void {
-    this.map = cloneMap();
+    this.applyLevelBackground();
+    const cfg = getLevelConfig(this.level);
+    this.map = cloneMaze(cfg.mazeKey);
+    this.mazeMeta = analyzeMaze(this.map);
     this.dotsLeft = countDots(this.map);
-    this.player = new Player(this.level);
+    this.player = new Player(this.level, this.mazeMeta);
     this.ghosts = [];
     for (let i = 0; i < 3; i++) {
-      this.ghosts.push(new Ghost(i, this.level));
+      this.ghosts.push(new Ghost(i, this.level, this.mazeMeta));
     }
-    this.powerTimer = 0;
+    // Bonus level — teleport ghosts OUT of pen immediately, set scared + slow,
+    // then they wander the chamber as eatable for 30s.
+    if (cfg.isBonus) {
+      this.bonusLevelTimer = 30000;
+      for (const g of this.ghosts) {
+        g.scared = true;
+        g.speed *= 0.5;
+        g.home = false;
+        // Teleport above the gate so they're NOT trapped inside the pen.
+        g.col = this.mazeMeta.penExit.col;
+        g.row = this.mazeMeta.penExit.row;
+        g.px = this.mazeMeta.penExit.col;
+        g.py = this.mazeMeta.penExit.row;
+      }
+    } else {
+      this.bonusLevelTimer = 0;
+    }
+    this.powerTimer = cfg.isBonus ? 30000 : 0;
     this.ghostScore = SCORE_GHOST_BASE;
     this.bonusItem = null;
-    this.bonusSpawnTimer = BONUS_FIRST_SPAWN_DELAY;
+    this.bonusSpawnTimer = cfg.isBonus ? 1000 : BONUS_FIRST_SPAWN_DELAY;
     this.boostTimer = 0;
     this.freezeTimer = 0;
     this.invincibleTimer = 0;
@@ -281,11 +363,74 @@ export class GameScene extends Phaser.Scene {
     this.drawMaze();
   }
 
+  private applyLevelBackground(): void {
+    const cfg = getLevelConfig(this.level);
+    if (this.bgImage.texture.key !== cfg.bgAsset) {
+      this.bgImage.setTexture(cfg.bgAsset);
+      const bgScale = Math.max(W / this.bgImage.width, H / this.bgImage.height);
+      this.bgImage.setScale(bgScale);
+    }
+    this.setupBgAnimations(cfg.bgAnimations || []);
+  }
+
+  private setupBgAnimations(anims: import('../config/levels').BgAnim[]): void {
+    // Always tear down previous level's animations first — fixes leak across levels.
+    for (const t of this.bgAnimTweens) t.stop();
+    this.bgAnimTweens = [];
+    for (const s of this.bgAnimSprites) s.destroy();
+    this.bgAnimSprites = [];
+
+    for (const a of anims) {
+      const sprite = this.add.image(a.startX, a.startY, a.sprite);
+      sprite.setDepth(1);  // above bgImage (0), below mazeGraphics (2)
+      sprite.setScale(a.scale);
+      if (a.alpha !== undefined) sprite.setAlpha(a.alpha);
+      if (a.flipX) sprite.setFlipX(true);
+      this.bgAnimSprites.push(sprite);
+
+      if (a.motion === 'scroll') {
+        const tween = this.tweens.add({
+          targets: sprite,
+          x: a.endX ?? a.startX,
+          y: a.endY ?? a.startY,
+          duration: a.duration,
+          repeat: -1,
+          repeatDelay: a.repeatDelay ?? 0,
+          ease: a.ease ?? 'Linear',
+        });
+        this.bgAnimTweens.push(tween);
+      } else if (a.motion === 'blink') {
+        const period = a.blinkPeriod ?? 1000;
+        const tween = this.tweens.add({
+          targets: sprite,
+          alpha: 0.15,
+          duration: period / 2,
+          yoyo: true,
+          repeat: -1,
+          ease: 'Linear',
+        });
+        this.bgAnimTweens.push(tween);
+      } else if (a.motion === 'orbit') {
+        // Simple horizontal orbit ping-pong — for things like satellites circling
+        const tween = this.tweens.add({
+          targets: sprite,
+          x: a.endX ?? a.startX,
+          y: a.endY ?? a.startY,
+          duration: a.duration,
+          yoyo: true,
+          repeat: -1,
+          ease: a.ease ?? 'Sine.inOut',
+        });
+        this.bgAnimTweens.push(tween);
+      }
+    }
+  }
+
   private resetAfterDeath(): void {
-    this.player = new Player(this.level);
+    this.player = new Player(this.level, this.mazeMeta);
     this.ghosts = [];
     for (let i = 0; i < 3; i++) {
-      this.ghosts.push(new Ghost(i, this.level));
+      this.ghosts.push(new Ghost(i, this.level, this.mazeMeta));
     }
     this.powerTimer = 0;
     this.invincibleTimer = INVINCIBLE_DURATION;
@@ -359,6 +504,10 @@ export class GameScene extends Phaser.Scene {
     if (this.freezeTimer > 0) this.freezeTimer -= dt;
     if (this.boostTimer > 0) this.boostTimer -= dt;
     if (this.popupTimer > 0) this.popupTimer -= dt;
+    if (this.bonusLevelTimer > 0) {
+      this.bonusLevelTimer -= dt;
+      this.updateHUD();
+    }
 
     // Bonus spawn
     if (!this.bonusItem) {
@@ -404,11 +553,13 @@ export class GameScene extends Phaser.Scene {
       this.score += SCORE_DOT;
       this.dotsLeft--;
       this.totalDotsEaten++;
+      this.spawnScoreFloater(SCORE_DOT, col, row);
       audioSystem.play('dot');
       this.drawMaze();
     } else if (tile === POWER) {
       this.map[row][col] = EMPTY;
       this.score += SCORE_POWER;
+      this.spawnScoreFloater(SCORE_POWER, col, row);
       // Don't decrement dotsLeft — power pellets don't gate level-up
       this.powerTimer = POWER_DURATION;
       this.ghostScore = SCORE_GHOST_BASE;
@@ -443,6 +594,7 @@ export class GameScene extends Phaser.Scene {
       if (collected) {
         const type = this.bonusItem.type;
         this.score += SCORE_BONUS;
+        this.spawnScoreFloater(SCORE_BONUS, this.player.col, this.player.row);
         this.bonusItem = null;
         if (type === 'boost') {
           this.boostTimer = BOOST_DURATION;
@@ -457,11 +609,15 @@ export class GameScene extends Phaser.Scene {
       }
     }
 
-    if (this.dotsLeft <= 0) {
+    const cfg = getLevelConfig(this.level);
+    const levelEnd = cfg.isBonus
+      ? this.bonusLevelTimer <= 0
+      : this.dotsLeft <= 0;
+    if (levelEnd) {
       this.gameState = 'levelwin';
       this.levelWinTimer = LEVEL_WIN_DURATION;
       this.score += 500 * this.level;
-      this.showPopup('LEVEL UP!');
+      this.showPopup(cfg.isBonus ? 'BONUS!' : 'LEVEL UP!');
       audioSystem.play('levelup');
       this.updateHUD();
     }
@@ -476,6 +632,7 @@ export class GameScene extends Phaser.Scene {
           g.eaten = true;
           g.scared = false;
           this.score += this.ghostScore;
+          this.spawnScoreFloater(this.ghostScore, g.col, g.row);
           this.ghostScore *= 2;
           this.totalGhostsEaten++;
           audioSystem.play('ghost');
@@ -542,9 +699,49 @@ export class GameScene extends Phaser.Scene {
     this.popupGlow.setAlpha(0);
   }
 
+  private dotFloaterCounter: number = 0;
+
+  private spawnScoreFloater(amount: number, col: number, row: number): void {
+    // Throttle small dot floaters — only show every 5th dot collected so we
+    // don't drown the screen in rising numbers.
+    if (amount < 50) {
+      this.dotFloaterCounter = (this.dotFloaterCounter + 1) % 5;
+      if (this.dotFloaterCounter !== 0) return;
+    }
+    const T = this.tileSize;
+    const x = this.offsetX + col * T + T / 2;
+    const y = this.offsetY + row * T + T / 2;
+    let color = '#00D2C8';
+    if (amount >= 200) color = '#FFB347';
+    else if (amount >= 100) color = '#FF6BB5';
+    else if (amount >= 50) color = '#FFD700';
+    const txt = this.add.text(x, y, `+${amount}`, {
+      fontFamily: '"Press Start 2P", monospace',
+      fontSize: amount >= 100 ? '14px' : '10px',
+      color,
+      stroke: '#000000',
+      strokeThickness: 3,
+    }).setOrigin(0.5).setDepth(50);
+    this.tweens.add({
+      targets: txt,
+      y: y - (amount >= 100 ? 50 : 32),
+      alpha: 0,
+      duration: amount >= 100 ? 1500 : 1100,
+      ease: 'Cubic.easeOut',
+      onComplete: () => txt.destroy(),
+    });
+  }
+
   private updateHUD(): void {
-    this.scoreText.setText(`SCORE: ${this.score}`);
-    this.levelText.setText(`LVL: ${this.level}`);
+    const cfg = getLevelConfig(this.level);
+    if (cfg.isBonus && this.bonusLevelTimer > 0) {
+      const sec = Math.ceil(this.bonusLevelTimer / 1000);
+      this.scoreText.setText(`BONUS: ${sec}s`);
+      this.levelText.setText(`SCORE: ${this.score}`);
+    } else {
+      this.scoreText.setText(`SCORE: ${this.score}`);
+      this.levelText.setText(`LVL: ${this.level}`);
+    }
 
     this.livesContainer.removeAll(true);
     for (let i = 0; i < this.lives; i++) {
@@ -576,7 +773,9 @@ export class GameScene extends Phaser.Scene {
           this.mazeGraphics.fillStyle(COLOR_WALL, 1);
           this.mazeGraphics.fillRect(x, y, T, T);
 
-          this.mazeGraphics.lineStyle(0.5, COLOR_WALL_BORDER, 1);
+          // Bright outline on every exposed wall edge (toward path) — makes
+          // walls pop against busy backgrounds.
+          this.mazeGraphics.lineStyle(2, COLOR_WALL_BORDER, 1);
           if (r > 0 && this.map[r - 1][c] !== WALL) {
             this.mazeGraphics.lineBetween(x, y, x + T, y);
           }

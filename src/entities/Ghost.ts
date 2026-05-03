@@ -1,9 +1,10 @@
 import {
   Direction, DX, DY, OPPOSITE, COLS, ROWS, WALL, GATE,
-  GhostAI, GHOST_STARTS, GHOST_AI_TYPES, GHOST_SPRITES,
+  GhostAI, GHOST_AI_TYPES, GHOST_SPRITES,
   GHOST_SPEED_MULTS, GHOST_HOME_TIMERS, PATROL_ROUTE,
-  getGhostBaseSpeed, GHOST_RESPAWN_DELAY, GHOST_PEN_EXIT,
+  getGhostBaseSpeed, GHOST_RESPAWN_DELAY,
 } from '../config/constants';
+import type { MazeMeta } from '../config/mazes';
 import { Player } from './Player';
 
 export class Ghost {
@@ -22,14 +23,16 @@ export class Ghost {
   home: boolean = true;
   homeTimer: number;
   patrolIdx: number;
+  meta: MazeMeta;
 
-  constructor(index: number, level: number) {
-    const start = GHOST_STARTS[index];
+  constructor(index: number, level: number, meta: MazeMeta) {
+    this.meta = meta;
+    const start = meta.ghostStarts[index];
     this.col = start.col;
     this.row = start.row;
     this.px = start.col;
     this.py = start.row;
-    this.dir = Direction.UP; // all ghosts start in pen, face up to exit
+    this.dir = Direction.UP;
     this.ai = GHOST_AI_TYPES[index];
     this.spriteKey = GHOST_SPRITES[this.ai];
     const baseSpeed = getGhostBaseSpeed(level);
@@ -52,7 +55,7 @@ export class Ghost {
   }
 
   private getTarget(player: Player): { col: number; row: number } {
-    if (this.eaten) return { col: GHOST_PEN_EXIT.col, row: GHOST_PEN_EXIT.row };
+    if (this.eaten) return { col: this.meta.penCenter.col, row: this.meta.penCenter.row };
     if (this.scared) return {
       col: Math.random() * COLS | 0,
       row: Math.random() * ROWS | 0,
@@ -81,14 +84,73 @@ export class Ghost {
     }
   }
 
+  /**
+   * BFS pathfinding from current position to target. Returns the first move
+   * direction along the shortest path, or -1 if no path exists.
+   * Used for eaten ghosts so they always find their way back to the pen
+   * even through dense mazes — greedy distance heuristic gets stuck in dead-ends.
+   */
+  private bfsNextDir(map: number[][], targetR: number, targetC: number, canPassGate: boolean): Direction {
+    const startR = this.row, startC = this.col;
+    if (startR === targetR && startC === targetC) return this.dir;
+
+    const visited: boolean[][] = Array.from({ length: ROWS }, () => new Array(COLS).fill(false));
+    const parent: Array<Array<{ r: number; c: number; d: Direction } | null>> =
+      Array.from({ length: ROWS }, () => new Array(COLS).fill(null));
+    visited[startR][startC] = true;
+
+    const queue: Array<{ r: number; c: number }> = [{ r: startR, c: startC }];
+    let found = false;
+
+    while (queue.length > 0) {
+      const { r, c } = queue.shift()!;
+      if (r === targetR && c === targetC) { found = true; break; }
+      for (let d = 0; d < 4; d++) {
+        let nc = c + DX[d];
+        const nr = r + DY[d];
+        if (nc < 0) nc = COLS - 1;
+        else if (nc >= COLS) nc = 0;
+        if (nr < 0 || nr >= ROWS) continue;
+        if (visited[nr][nc]) continue;
+        const t = map[nr][nc];
+        if (t === WALL) continue;
+        if (t === GATE && !canPassGate) continue;
+        visited[nr][nc] = true;
+        parent[nr][nc] = { r, c, d: d as Direction };
+        queue.push({ r: nr, c: nc });
+      }
+    }
+
+    if (!found) return -1 as Direction;
+
+    // Walk back from target to find the first step from start
+    let cr = targetR, cc = targetC;
+    let firstDir: Direction = this.dir;
+    while (true) {
+      const p = parent[cr][cc];
+      if (!p) break;
+      if (p.r === startR && p.c === startC) { firstDir = p.d; break; }
+      cr = p.r; cc = p.c;
+    }
+    return firstDir;
+  }
+
   private chooseDir(map: number[][], player: Player): Direction {
     const canGate = this.eaten || this.home;
+
+    // Eaten ghosts use BFS for guaranteed return to pen — no more wandering lost.
+    if (this.eaten) {
+      const bfsDir = this.bfsNextDir(map, this.meta.penCenter.row, this.meta.penCenter.col, true);
+      if (bfsDir !== (-1 as Direction)) return bfsDir;
+    }
+
     const target = this.getTarget(player);
-    let bestDir = this.dir;
+    let bestDir: Direction = -1 as Direction;
     let bestDist = Infinity;
 
+    // First pass — pick the best NON-reverse walkable direction.
     for (let d = 0; d < 4; d++) {
-      if (d === OPPOSITE[this.dir] && !this.home) continue;
+      if (d === OPPOSITE[this.dir]) continue;
       const nc = this.col + DX[d];
       const nr = this.row + DY[d];
       const wrappedCol = nc < 0 ? COLS - 1 : nc >= COLS ? 0 : nc;
@@ -96,8 +158,19 @@ export class Ghost {
       const dd = this.dist(nc, nr, target.col, target.row);
       if (dd < bestDist) { bestDist = dd; bestDir = d as Direction; }
     }
+    if (bestDir !== -1) return bestDir;
 
-    return bestDir;
+    // Dead-end fallback — only the reverse direction is walkable, take it.
+    const opp = OPPOSITE[this.dir] as Direction;
+    if (opp !== undefined) {
+      const nc = this.col + DX[opp];
+      const nr = this.row + DY[opp];
+      const wrappedCol = nc < 0 ? COLS - 1 : nc >= COLS ? 0 : nc;
+      if (this.isWalkableForGhost(map, wrappedCol, nr, canGate)) return opp;
+    }
+
+    // Truly stuck (surrounded) — keep current dir, will be re-evaluated next tile.
+    return this.dir;
   }
 
   private atCenter(): boolean {
@@ -116,10 +189,10 @@ export class Ghost {
         this.respawning = false;
         this.eaten = false;
         this.scared = powerActive;
-        this.col = GHOST_PEN_EXIT.col;
-        this.row = GHOST_PEN_EXIT.row;
-        this.px = GHOST_PEN_EXIT.col;
-        this.py = GHOST_PEN_EXIT.row;
+        this.col = this.meta.penExit.col;
+        this.row = this.meta.penExit.row;
+        this.px = this.meta.penExit.col;
+        this.py = this.meta.penExit.row;
         this.dir = Direction.LEFT;
         return true;
       }
@@ -131,10 +204,10 @@ export class Ghost {
       this.homeTimer -= dtMs;
       if (this.homeTimer <= 0) {
         this.home = false;
-        this.col = GHOST_PEN_EXIT.col;
-        this.row = GHOST_PEN_EXIT.row;
-        this.px = GHOST_PEN_EXIT.col;
-        this.py = GHOST_PEN_EXIT.row;
+        this.col = this.meta.penExit.col;
+        this.row = this.meta.penExit.row;
+        this.px = this.meta.penExit.col;
+        this.py = this.meta.penExit.row;
         this.dir = Direction.LEFT;
         if (powerActive) this.scared = true;
       }
@@ -162,8 +235,10 @@ export class Ghost {
         this.px = this.col;
         this.py = this.row;
 
-        // Check pen arrival for eaten ghosts
-        if (this.eaten && this.col >= 8 && this.col <= 10 && this.row >= 8 && this.row <= 10) {
+        // Check pen arrival for eaten ghosts — within 1 cell of pen center
+        if (this.eaten &&
+            Math.abs(this.col - this.meta.penCenter.col) <= 1 &&
+            Math.abs(this.row - this.meta.penCenter.row) <= 1) {
           this.respawning = true;
           this.respawnTimer = GHOST_RESPAWN_DELAY;
           this.eaten = false;

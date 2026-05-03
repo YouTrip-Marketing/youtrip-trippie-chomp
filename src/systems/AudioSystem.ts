@@ -10,6 +10,7 @@ export class AudioSystem {
   private currentBGM: BGMTrack | null = null;
   private bgmGain: GainNode | null = null;
   private bgmTimeout: number | null = null;
+  private muted: boolean = false;
 
   init(): void {
     if (!this.ctx) {
@@ -18,10 +19,24 @@ export class AudioSystem {
     if (this.ctx.state === 'suspended') {
       this.ctx.resume();
     }
+    // Restore mute preference from localStorage
+    try {
+      this.muted = localStorage.getItem('chomp-muted') === '1';
+    } catch (e) {}
+  }
+
+  isMuted(): boolean { return this.muted; }
+
+  setMuted(m: boolean): void {
+    this.muted = m;
+    try { localStorage.setItem('chomp-muted', m ? '1' : '0'); } catch (e) {}
+    if (this.bgmGain && this.ctx) {
+      this.bgmGain.gain.setValueAtTime(m ? 0 : 0.05, this.ctx.currentTime);
+    }
   }
 
   play(type: 'dot' | 'power' | 'ghost' | 'die' | 'click' | 'levelup' | 'gameover'): void {
-    if (!this.ctx) return;
+    if (!this.ctx || this.muted) return;
     const now = this.ctx.currentTime;
     const osc = this.ctx.createOscillator();
     const gain = this.ctx.createGain();
@@ -173,7 +188,7 @@ export class AudioSystem {
     this.currentBGM = track;
 
     this.bgmGain = this.ctx.createGain();
-    this.bgmGain.gain.value = track === 'lobby' ? 0.08 : 0.10;
+    this.bgmGain.gain.value = this.muted ? 0 : (track === 'lobby' ? 0.08 : 0.10);
     this.bgmGain.connect(this.ctx.destination);
 
     if (track === 'lobby') {

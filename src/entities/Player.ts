@@ -1,35 +1,38 @@
 import {
   Direction, DX, DY, OPPOSITE, COLS, ROWS, WALL, GATE,
-  PLAYER_START, getPlayerSpeed,
+  getPlayerSpeed,
 } from '../config/constants';
+import type { MazeMeta } from '../config/mazes';
 
 export class Player {
   col: number;
   row: number;
-  px: number; // sub-tile x position
-  py: number; // sub-tile y position
+  px: number;
+  py: number;
   dir: Direction;
   nextDir: Direction;
   speed: number;
   lastHDir: 'left' | 'right' = 'right';
   mouthAngle: number = 0;
   mouthDir: number = 1;
+  private spawn: { row: number; col: number };
 
-  constructor(level: number) {
-    this.col = PLAYER_START.col;
-    this.row = PLAYER_START.row;
-    this.px = PLAYER_START.col;
-    this.py = PLAYER_START.row;
+  constructor(level: number, meta: MazeMeta) {
+    this.spawn = meta.playerStart;
+    this.col = this.spawn.col;
+    this.row = this.spawn.row;
+    this.px = this.spawn.col;
+    this.py = this.spawn.row;
     this.dir = Direction.LEFT;
     this.nextDir = Direction.NONE;
     this.speed = getPlayerSpeed(level);
   }
 
   reset(level: number): void {
-    this.col = PLAYER_START.col;
-    this.row = PLAYER_START.row;
-    this.px = PLAYER_START.col;
-    this.py = PLAYER_START.row;
+    this.col = this.spawn.col;
+    this.row = this.spawn.row;
+    this.px = this.spawn.col;
+    this.py = this.spawn.row;
     this.dir = Direction.LEFT;
     this.nextDir = Direction.NONE;
     this.speed = getPlayerSpeed(level);

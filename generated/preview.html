@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Trippie Chomp — Asset Preview</title>
+<style>
+  :root {
+    --bg: #0d0d1a;
+    --panel: #150d26;
+    --panel-2: #2a1845;
+    --ink: #e8e3f5;
+    --ink-dim: #8b81a3;
+    --accent: #00d2c8;
+    --accent-warm: #ff8fb1;
+    --gold: #ffd700;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif;
+    padding: 32px 40px 80px;
+  }
+  h1 {
+    font-size: 28px;
+    margin: 0 0 4px 0;
+    letter-spacing: -0.5px;
+  }
+  .subtitle {
+    color: var(--ink-dim);
+    font-size: 14px;
+    margin-bottom: 32px;
+  }
+  h2 {
+    font-size: 18px;
+    margin: 32px 0 16px 0;
+    color: var(--accent);
+    border-bottom: 1px solid var(--panel-2);
+    padding-bottom: 8px;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+  }
+  .section-meta {
+    font-size: 12px;
+    color: var(--ink-dim);
+    margin: -12px 0 16px 0;
+  }
+  .grid {
+    display: grid;
+    gap: 20px;
+  }
+  .grid.bgs {
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  }
+  .grid.shares {
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--panel-2);
+    border-radius: 8px;
+    overflow: hidden;
+    transition: transform 0.15s ease, border-color 0.15s ease;
+  }
+  .card:hover {
+    transform: translateY(-2px);
+    border-color: var(--accent);
+  }
+  .card img {
+    display: block;
+    width: 100%;
+    height: auto;
+    image-rendering: pixelated;
+  }
+  .card .label {
+    padding: 10px 12px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--ink);
+    border-top: 1px solid var(--panel-2);
+  }
+  .card .label .dim {
+    color: var(--ink-dim);
+    font-weight: 400;
+    margin-left: 6px;
+  }
+  .compare {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-top: 12px;
+  }
+  .compare > .card {
+    margin: 0;
+  }
+  .gap-list {
+    background: var(--panel);
+    border: 1px solid var(--panel-2);
+    border-radius: 8px;
+    padding: 16px 20px;
+    margin-top: 16px;
+  }
+  .gap-list h3 {
+    font-size: 14px;
+    margin: 0 0 8px 0;
+    color: var(--accent-warm);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .gap-list ul {
+    margin: 0 0 12px 0;
+    padding-left: 20px;
+    font-size: 14px;
+    line-height: 1.6;
+  }
+  .gap-list li { margin-bottom: 4px; }
+  .gap-list .priority {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 3px;
+    margin-right: 6px;
+    vertical-align: middle;
+  }
+  .priority.p1 { background: var(--accent-warm); color: #1a0a0a; }
+  .priority.p2 { background: var(--gold); color: #1a0a0a; }
+  .priority.p3 { background: var(--ink-dim); color: #1a0a0a; }
+</style>
+</head>
+<body>
+  <h1>Trippie Chomp — Asset Preview</h1>
+  <div class="subtitle">14 P1 assets shipped to <code>public/assets/</code> · 2026-04-29</div>
+
+  <h2>Level Backgrounds</h2>
+  <div class="section-meta">480×720 WebP · loop order: SG → JP → TH → KR → MY → US → Bali · ~85 KB total</div>
+  <div class="grid bgs">
+    <div class="card"><img src="../public/assets/bg-sg-airport.webp" alt="SG Airport"><div class="label">L1 · Singapore Airport <span class="dim">SIN</span></div></div>
+    <div class="card"><img src="../public/assets/bg-jp-tokyo.webp" alt="Tokyo"><div class="label">L2 · Tokyo <span class="dim">TYO</span></div></div>
+    <div class="card"><img src="../public/assets/bg-th-bangkok.webp" alt="Bangkok"><div class="label">L3 · Bangkok <span class="dim">BKK</span></div></div>
+    <div class="card"><img src="../public/assets/bg-kr-seoul.webp" alt="Seoul"><div class="label">L4 · Seoul <span class="dim">SEL</span></div></div>
+    <div class="card"><img src="../public/assets/bg-my-kl.webp" alt="Kuala Lumpur"><div class="label">L5 · Kuala Lumpur <span class="dim">KUL</span></div></div>
+    <div class="card"><img src="../public/assets/bg-us-nyc.webp" alt="New York"><div class="label">L6 · New York <span class="dim">NYC</span></div></div>
+    <div class="card"><img src="../public/assets/bg-id-bali.webp" alt="Bali"><div class="label">L7 · Bali <span class="dim">DPS</span></div></div>
+  </div>
+
+  <h2>Share Images (IG Story)</h2>
+  <div class="section-meta">1080×1920 PNG · destination-aware variants · top/bottom padded for code-overlay text · ~7.6 MB total</div>
+  <div class="grid shares">
+    <div class="card"><img src="../public/assets/share-sg-airport.png" alt="SG share"><div class="label">SG Airport</div></div>
+    <div class="card"><img src="../public/assets/share-jp-tokyo.png" alt="Tokyo share"><div class="label">Tokyo</div></div>
+    <div class="card"><img src="../public/assets/share-th-bangkok.png" alt="Bangkok share"><div class="label">Bangkok</div></div>
+    <div class="card"><img src="../public/assets/share-kr-seoul.png" alt="Seoul share"><div class="label">Seoul</div></div>
+    <div class="card"><img src="../public/assets/share-my-kl.png" alt="KL share"><div class="label">Kuala Lumpur</div></div>
+    <div class="card"><img src="../public/assets/share-us-nyc.png" alt="NYC share"><div class="label">New York</div></div>
+    <div class="card"><img src="../public/assets/share-id-bali.png" alt="Bali share"><div class="label">Bali</div></div>
+  </div>
+
+  <h2>Parallax Sprite Samples (Tokyo)</h2>
+  <div class="section-meta">3 layer types tested — fast vehicle, medium atmosphere, static landmark · transparent PNG via flood-fill keyout</div>
+  <div class="grid bgs" style="background: linear-gradient(135deg, #1a1538, #2a1845); padding: 16px; border-radius: 8px;">
+    <div class="card" style="background: transparent;"><img src="sprite-jp-shinkansen-keyed.png" alt="Shinkansen"><div class="label">FAST · Shinkansen <span class="dim">vehicle layer</span></div></div>
+    <div class="card" style="background: transparent;"><img src="sprite-jp-sakura-keyed.png" alt="Sakura petals"><div class="label">MEDIUM · Sakura petals <span class="dim">atmosphere layer</span></div></div>
+    <div class="card" style="background: transparent;"><img src="sprite-jp-neon-keyed.png" alt="Neon billboard"><div class="label">STATIC · Neon billboard <span class="dim">landmark layer</span></div></div>
+  </div>
+  <div class="section-meta" style="margin-top: 12px;">Pipeline: Gemini --sprite generation → flood-fill bg keyout (only border-connected light pixels become transparent, so subjects with light interior colors like the train body are preserved). Greenlight = run all 21.</div>
+
+  <h2>Still Missing</h2>
+  <div class="section-meta">Per PLAN.md §3 (virality creatives) and levels.ts asset references</div>
+
+  <div class="gap-list">
+    <h3><span class="priority p1">P1</span>Load-bearing if referenced in levels.ts</h3>
+    <ul>
+      <li><strong>21 parallax sprite layers</strong> (3 per destination, transparent PNG): <code>plane / conveyor / board</code> · <code>shinkansen / sakura / neon</code> · <code>tuktuk / boat / lanterns</code> · <code>scooter / billboard / namsan</code> · <code>monorail / jungle / petronas</code> · <code>taxi / steam / billboard</code> · <code>surf / frangipani / parasol</code></li>
+    </ul>
+
+    <h3><span class="priority p2">P2</span>Virality-amplifying creative (PLAN §3)</h3>
+    <ul>
+      <li><strong>Score milestone share variants</strong> — bronze/silver/gold border or scene-shift per destination. Up to 3 tiers × 7 destinations = 21 variants. Lets the same player share 5 different images across 5 plays.</li>
+      <li><strong>Passport stamp row</strong> — 7 small destination-stamp icons (filled + silhouette versions) for the share image's bottom row "fill the passport" mechanic.</li>
+      <li><strong>Boarding pass card design</strong> — currently planned as code-rendered text. A templated card image (or even a Trippie-themed boarding pass illustration) would land harder.</li>
+    </ul>
+
+    <h3><span class="priority p3">P3</span>Polish-tier (skip if time tight)</h3>
+    <ul>
+      <li><strong>Title screen hero</strong> — game-title art for the Start scene. Could be a "Trippie Chomp" logo lockup with character.</li>
+      <li><strong>Ghost sprite variants</strong> — patrol + shy currently reuse chaser/ambusher. Distinct visuals would aid readability.</li>
+      <li><strong>Game-over bg destination variants</strong> — current generic dark purple bg could be replaced with the destination scene the player ended on, for narrative coherence.</li>
+      <li><strong>Audio SFX</strong> — 4-5 free samples from kenney.nl per PLAN §5 Decision B. Not images, but creative work.</li>
+    </ul>
+  </div>
+</body>
+</html>
